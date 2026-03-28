@@ -1,6 +1,6 @@
-# go_power
+# Power Guard
 
-Small Linux battery-guard daemon for GNOME desktops.
+Power Guard is a lightweight Go daemon that monitors battery levels and automatically suspends or shuts down the system when thresholds are reached. It is signal-driven (uses UPower/D-Bus events) rather than polling, making it efficient and responsive.
 
 Behavior:
 
@@ -18,12 +18,24 @@ Battery monitoring is done over D-Bus via `github.com/godbus/dbus/v5` using UPow
 ## Build
 
 ```bash
-cd ~/projects/go_power
+git clone https://github.com/wathika-eng/power_guard --depth 1
+cd power_guard
 go mod tidy
 go build -o go-power-guardian .
 ```
 
-## Install Binary
+## Install using serviceman (preferred)
+
+```bash
+curl -sS https://webi.sh/serviceman | sh; \
+source ~/.config/envman/PATH.env
+
+make build
+
+make serviceman-add-daemon-best
+```
+
+<!-- ## Install Binary
 
 ```bash
 install -Dm755 ./go-power-guardian ~/.local/bin/go-power-guardian
@@ -35,18 +47,7 @@ install -Dm755 ./go-power-guardian ~/.local/bin/go-power-guardian
 install -Dm644 ./power-guardian.service ~/.config/systemd/user/power-guardian.service
 systemctl --user daemon-reload
 systemctl --user enable --now power-guardian.service
-```
-
-## Install using serviceman
-
-```bash
-curl -sS https://webi.sh/serviceman | sh; \
-source ~/.config/envman/PATH.env
-
-make build
-
-make serviceman-add-daemon-best
-```
+``` -->
 
 Check logs:
 
