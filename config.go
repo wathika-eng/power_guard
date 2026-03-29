@@ -9,31 +9,33 @@ import (
 )
 
 type config struct {
-	SuspendThreshold   float64
-	ShutdownThreshold  float64
-	PollInterval       time.Duration
-	Cooldown           time.Duration
-	SuspendRetries     int
-	SuspendRetryDelay  time.Duration
-	ShutdownRetries    int
-	ShutdownRetryDelay time.Duration
-	EmergencyPoweroff  bool
-	DryRun             bool
-	OneShot            bool
-	TestPercentage     *float64
+	SuspendThreshold    float64
+	ShutdownThreshold   float64
+	PollInterval        time.Duration
+	Cooldown            time.Duration
+	SuspendRetries      int
+	SuspendRetryDelay   time.Duration
+	ShutdownRetries     int
+	ShutdownRetryDelay  time.Duration
+	ShutdownSettleDelay time.Duration
+	EmergencyPoweroff   bool
+	DryRun              bool
+	OneShot             bool
+	TestPercentage      *float64
 }
 
 func loadConfig() (config, error) {
 	cfg := config{
-		SuspendThreshold:   5,
-		ShutdownThreshold:  3,
-		PollInterval:       60 * time.Second,
-		Cooldown:           2 * time.Minute,
-		SuspendRetries:     3,
-		SuspendRetryDelay:  2 * time.Second,
-		ShutdownRetries:    4,
-		ShutdownRetryDelay: 1 * time.Second,
-		EmergencyPoweroff:  true,
+		SuspendThreshold:    5,
+		ShutdownThreshold:   3,
+		PollInterval:        60 * time.Second,
+		Cooldown:            2 * time.Minute,
+		SuspendRetries:      3,
+		SuspendRetryDelay:   2 * time.Second,
+		ShutdownRetries:     4,
+		ShutdownRetryDelay:  1 * time.Second,
+		ShutdownSettleDelay: 4 * time.Second,
+		EmergencyPoweroff:   true,
 	}
 
 	if v := os.Getenv("POWER_SUSPEND_RETRIES"); v != "" {
@@ -66,6 +68,14 @@ func loadConfig() (config, error) {
 			return cfg, fmt.Errorf("POWER_SHUTDOWN_RETRY_DELAY: %w", err)
 		}
 		cfg.ShutdownRetryDelay = d
+	}
+
+	if v := os.Getenv("POWER_SHUTDOWN_SETTLE_DELAY"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return cfg, fmt.Errorf("POWER_SHUTDOWN_SETTLE_DELAY: %w", err)
+		}
+		cfg.ShutdownSettleDelay = d
 	}
 
 	if v := os.Getenv("POWER_EMERGENCY_POWEROFF"); v != "" {
@@ -154,6 +164,9 @@ func loadConfig() (config, error) {
 	}
 	if cfg.ShutdownRetryDelay < 0 {
 		return cfg, errors.New("POWER_SHUTDOWN_RETRY_DELAY cannot be negative")
+	}
+	if cfg.ShutdownSettleDelay < 0 {
+		return cfg, errors.New("POWER_SHUTDOWN_SETTLE_DELAY cannot be negative")
 	}
 
 	return cfg, nil

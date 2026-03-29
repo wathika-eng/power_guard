@@ -12,7 +12,7 @@ tidy:
 	go mod tidy
 
 build: tidy
-	go build -o $(BINARY) .
+	go build -ldflags "-s -w" -o $(BINARY) .
 
 run: build
 	./$(BINARY)

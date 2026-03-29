@@ -79,8 +79,11 @@ func (d *daemon) muteAndShutdown(percentage float64) error {
 	var lastErr error
 	for attempt := 1; attempt <= d.cfg.ShutdownRetries; attempt++ {
 		if err := d.tryShutdownOnce(); err == nil {
-			d.lastShutdown = now
-			return nil
+			time.Sleep(d.cfg.ShutdownSettleDelay)
+			if attempt < d.cfg.ShutdownRetries {
+				continue
+			}
+			lastErr = fmt.Errorf("shutdown command accepted but process still alive after %s", d.cfg.ShutdownSettleDelay)
 		} else {
 			lastErr = err
 			if attempt < d.cfg.ShutdownRetries {
@@ -91,7 +94,7 @@ func (d *daemon) muteAndShutdown(percentage float64) error {
 	}
 
 	if d.cfg.EmergencyPoweroff {
-		log.Println("shutdown retries exhausted, forcing emergency poweroff")
+		log.Printf("shutdown retries exhausted, forcing emergency poweroff")
 		if err := runEmergencyPoweroff(); err != nil {
 			return fmt.Errorf("emergency poweroff failed: %w", err)
 		}
@@ -145,16 +148,16 @@ func runIgnoreInhibitorsAction(action string) error {
 		commands = [][]string{
 			{"loginctl", "suspend", "-i"},
 			{"systemctl", "suspend", "-i", "--force"},
-			{"systemctl", "start", "suspend.target", "--no-block"},
+			{"systemctl", "start", "suspend.target"},
 		}
 	case "poweroff":
 		commands = [][]string{
 			{"loginctl", "poweroff", "-i"},
 			{"systemctl", "-i", "poweroff"},
-			{"systemctl", "poweroff", "-i", "--force", "--no-wall"},
-			{"systemctl", "start", "poweroff.target", "--job-mode=replace-irreversibly", "--no-block"},
-			{"systemctl", "poweroff", "--force", "--force", "--no-wall"},
 			{"shutdown", "-P", "now"},
+			{"systemctl", "poweroff", "-i", "--force", "--no-wall"},
+			{"systemctl", "start", "poweroff.target", "--job-mode=replace-irreversibly"},
+			{"systemctl", "poweroff", "--force", "--force", "--no-wall"},
 		}
 	default:
 		return fmt.Errorf("unsupported fallback action: %s", action)
@@ -162,8 +165,7 @@ func runIgnoreInhibitorsAction(action string) error {
 
 	var errs []error
 	for _, cmdArgs := range commands {
-		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-		out, err := cmd.CombinedOutput()
+		out, err := runCommand(cmdArgs)
 		if err == nil {
 			return nil
 		}
@@ -181,16 +183,15 @@ func runEmergencyPoweroff() error {
 	commands := [][]string{
 		{"loginctl", "poweroff", "-i"},
 		{"systemctl", "-i", "poweroff"},
-		{"systemctl", "poweroff", "--force", "--force", "--no-wall"},
 		{"shutdown", "-P", "now"},
+		{"systemctl", "poweroff", "--force", "--force", "--no-wall"},
 		{"/usr/sbin/shutdown", "-P", "now"},
 		{"/sbin/shutdown", "-P", "now"},
 	}
 
 	var errs []error
 	for _, cmdArgs := range commands {
-		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-		out, err := cmd.CombinedOutput()
+		out, err := runCommand(cmdArgs)
 		if err == nil {
 			return nil
 		}
@@ -216,16 +217,20 @@ func muteAudio(dryRun bool) error {
 
 	commands := [][]string{
 		{"wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"},
+		{"wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "true"},
 		{"wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "1"},
+		{"wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0"},
 		{"pactl", "set-sink-mute", "@DEFAULT_SINK@", "1"},
+		{"pactl", "set-sink-volume", "@DEFAULT_SINK@", "0%"},
 		{"amixer", "-q", "set", "Master", "mute"},
 		{"amixer", "-q", "sset", "Master", "mute"},
+		{"amixer", "-q", "-c", "0", "sset", "Master", "mute"},
+		{"amixer", "-q", "-c", "0", "sset", "Master", "0%"},
 	}
 
 	var errs []error
 	for _, cmdArgs := range commands {
-		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-		out, err := cmd.CombinedOutput()
+		out, err := runCommand(cmdArgs)
 		if err == nil {
 			return nil
 		}
@@ -284,7 +289,15 @@ func muteAudioInUserSessions() error {
 			},
 			{
 				name: "runuser",
+				args: []string{"-u", u.Username, "--", "env", envPairs[0], envPairs[1], "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0"},
+			},
+			{
+				name: "runuser",
 				args: []string{"-u", u.Username, "--", "env", envPairs[0], envPairs[1], "pactl", "set-sink-mute", "@DEFAULT_SINK@", "1"},
+			},
+			{
+				name: "runuser",
+				args: []string{"-u", u.Username, "--", "env", envPairs[0], envPairs[1], "pactl", "set-sink-volume", "@DEFAULT_SINK@", "0%"},
 			},
 			{
 				name: "sudo",
@@ -292,14 +305,21 @@ func muteAudioInUserSessions() error {
 			},
 			{
 				name: "sudo",
+				args: []string{"-u", u.Username, "env", envPairs[0], envPairs[1], "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0"},
+			},
+			{
+				name: "sudo",
 				args: []string{"-u", u.Username, "env", envPairs[0], envPairs[1], "pactl", "set-sink-mute", "@DEFAULT_SINK@", "1"},
+			},
+			{
+				name: "sudo",
+				args: []string{"-u", u.Username, "env", envPairs[0], envPairs[1], "pactl", "set-sink-volume", "@DEFAULT_SINK@", "0%"},
 			},
 		}
 
 		for _, sc := range sessionCommands {
 			tried++
-			cmd := exec.Command(sc.name, sc.args...)
-			out, err := cmd.CombinedOutput()
+			out, err := runCommand(append([]string{sc.name}, sc.args...))
 			if err == nil {
 				return nil
 			}
@@ -316,4 +336,14 @@ func muteAudioInUserSessions() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+func runCommand(cmdArgs []string) ([]byte, error) {
+	if len(cmdArgs) == 0 {
+		return nil, errors.New("empty command")
+	}
+
+	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	out, err := cmd.CombinedOutput()
+	return out, err
 }

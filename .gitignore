@@ -8,7 +8,7 @@
 
 # Test binary, built with `go test -c`
 *.test
-
+power-guardian-mac
 # Output of the go coverage tool
 *.out
 *go-power-guardian

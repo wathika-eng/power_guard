@@ -65,3 +65,20 @@ Service environment variables:
 - `POWER_ACTION_COOLDOWN` (default `2m`)
 
 If suspend/shutdown is denied by policy on your distro, add a polkit rule allowing your local active user to call `org.freedesktop.login1` power actions.
+
+<!-- #### Todo
+
+Found the two culprits in your output:
+
+1. power-guardian.service — the worst offender
+/etc/systemd/system/power-guardian.service:Wants=network-online.target systemd-networkd-wait-online.service
+This is your own custom service and it's directly Wants-ing systemd-networkd-wait-online.service by name. That's what's triggering the 2-minute timeout despite the service being disabled. Fix it:
+bashsudo systemctl edit power-guardian.service
+Replace the After/Wants lines with NetworkManager-aware equivalents:
+ini[Unit]
+After=network-online.target
+Wants=network-online.target
+
+```
+
+Remove the explicit `systemd-networkd-wait-online.service` reference entirely. -->
