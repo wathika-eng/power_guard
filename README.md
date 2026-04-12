@@ -24,7 +24,52 @@ go mod tidy
 go build -o go-power-guardian .
 ```
 
-## Install using serviceman (preferred)
+## Install with native systemd (recommended)
+
+Build and install the binary:
+
+```bash
+make install-bin-root
+```
+
+Install the unit:
+
+```bash
+sudo install -Dm644 ./power-guardian.service /etc/systemd/system/power-guardian.service
+```
+
+Optional: set overrides in an environment file:
+
+```bash
+sudo tee /etc/default/power-guardian >/dev/null <<'EOF'
+POWER_SUSPEND_THRESHOLD=5
+POWER_SHUTDOWN_THRESHOLD=3
+POWER_POLL_INTERVAL=0
+POWER_ACTION_COOLDOWN=2m
+POWER_SUSPEND_RETRIES=3
+POWER_SUSPEND_RETRY_DELAY=2s
+POWER_SHUTDOWN_RETRIES=4
+POWER_SHUTDOWN_RETRY_DELAY=1s
+POWER_SHUTDOWN_SETTLE_DELAY=4s
+POWER_EMERGENCY_POWEROFF=true
+EOF
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now power-guardian.service
+```
+
+Check status and logs:
+
+```bash
+systemctl status power-guardian.service --no-pager
+journalctl -u power-guardian.service -f
+```
+
+## Install using serviceman (backup method)
 
 ```bash
 curl -sS https://webi.sh/serviceman | sh; \
