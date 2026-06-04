@@ -1,5 +1,7 @@
 # Power Guard
 
+Better alternative: https://gist.github.com/RobbiNespu/ee3033954fc15653a800a4a5823c84ee
+
 Power Guard is a lightweight Go daemon that monitors battery levels and automatically suspends or shuts down the system when thresholds are reached. It is signal-driven (uses UPower/D-Bus events) rather than polling, making it efficient and responsive.
 
 Behavior:
